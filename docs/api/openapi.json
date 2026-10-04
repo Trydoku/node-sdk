@@ -1,0 +1,915 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "TRYDOKU API",
+        "version": "1.0.0",
+        "description": "Trydoku API documentation"
+    },
+    "servers": [
+        {
+            "url": "https:\/\/www.trydoku.com\/api\/v1"
+        }
+    ],
+    "paths": {
+        "\/generate": {
+            "post": {
+                "operationId": "v1.generate",
+                "description": "Submits a batch job for multi-row document generation. Accepts data as structured JSON or matrix rows.",
+                "summary": "Generate Documents (Batch Engine)",
+                "tags": [
+                    "Document"
+                ],
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "Optional. 1\u2013255 characters of A-Z, a-z, 0-9, \".\", \"_\" or \"-\". Empty or whitespace-only is treated as absent. Successful 2xx responses are replayed for 24 hours for the same user, key, and body. Replays skip the generate rate limiter. 409 means this key has an unfinished reservation (including after lock expiry if no batch committed); reuse the same key \u2014 a new key after 409 can duplicate work if the original request was only slow. 422 IDEMPOTENCY_KEY_CONFLICT means the key was reused with a different body.",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "req-01JABC2DEFG3HIJK4LMNOPQRST"
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application\/json": {
+                            "schema": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#\/components\/schemas\/GenerateDocumentRequest"
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "template_uuid": {
+                                                "type": "string",
+                                                "description": "UUID of an existing template owned by the user.",
+                                                "examples": [
+                                                    "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+                                                ]
+                                            },
+                                            "template_base64": {
+                                                "type": "string",
+                                                "description": "Strict padded Base64 for a non-macro DOCX OPC package; decoded size is limited to 10 MiB."
+                                            },
+                                            "data": {
+                                                "type": "array",
+                                                "description": "One to 500 rows, limited to 5 MiB canonical JSON, 50,000 nodes, three nested levels, and 50,000 UTF-8 bytes per string.",
+                                                "items": {
+                                                    "type": "object",
+                                                    "description": "A row object, or a dense row list paired with variables. Empty-only rows are removed; zero and false are values.",
+                                                    "examples": [
+                                                        {
+                                                            "invoice_date": "2026-07-18",
+                                                            "client_name": "Acme",
+                                                            "invoice_amount": 125.5,
+                                                            "is_taxable": true,
+                                                            "items": [
+                                                                {
+                                                                    "price": 12.5,
+                                                                    "category": "software"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            },
+                                            "variables": {
+                                                "type": "array",
+                                                "description": "For indexed rows only: one to 100 unique exact UTF-8 names, each at most 128 bytes.",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "variable_mapping": {
+                                                "type": "object",
+                                                "description": "Optional source-to-placeholder object with at most 100 unique targets."
+                                            },
+                                            "format": {
+                                                "type": "string",
+                                                "description": "Output format (e.g. zip).",
+                                                "examples": [
+                                                    "zip"
+                                                ]
+                                            }
+                                        },
+                                        "required": [
+                                            "data"
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "402": {
+                        "description": "Insufficient credits.",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "credits_available": {
+                                            "type": "number"
+                                        },
+                                        "credits_required": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "credits_available",
+                                        "credits_required"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "201": {
+                        "description": "Triggered a new document generation batch.",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#\/components\/schemas\/BatchResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "GENERATION_SETUP_FAILED"
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "Document generation setup failed and credits have been refunded."
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "`BatchResource`",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#\/components\/schemas\/BatchResource"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "GENERATION_SETUP_PENDING"
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#\/components\/responses\/AuthenticationException"
+                    },
+                    "422": {
+                        "description": "Validation failed, or this Idempotency-Key was reused with a different request body (IDEMPOTENCY_KEY_CONFLICT).",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#\/components\/responses\/AuthorizationException"
+                    },
+                    "413": {
+                        "description": "Raw request body exceeds 20 MiB.",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "details": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Encoding is not absent or exactly identity.",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "details": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "This Idempotency-Key is already in progress, or the reservation has no stored 2xx yet.",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "details": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "\/batches\/{batchId}": {
+            "get": {
+                "operationId": "v1.batches.show",
+                "description": "Retrieve the status and items of a specific batch.",
+                "summary": "Get Batch Status",
+                "tags": [
+                    "Document"
+                ],
+                "parameters": [
+                    {
+                        "name": "batchId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`BatchResource`",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#\/components\/schemas\/BatchResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#\/components\/responses\/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "\/batches\/{batchId}\/zip": {
+            "get": {
+                "operationId": "v1.batches.zip",
+                "description": "Download the generated documents as a ZIP file.",
+                "summary": "Download Batch as ZIP",
+                "tags": [
+                    "Document"
+                ],
+                "parameters": [
+                    {
+                        "name": "batchId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application\/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        },
+                        "headers": {
+                            "Content-Disposition": {
+                                "required": true,
+                                "schema": {
+                                    "type": "string"
+                                },
+                                "example": "attachment; filename=trydoku_results.zip"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "INTERNAL_SERVER_ERROR"
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "Failed to create zip file"
+                                                },
+                                                "details": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Failed to create zip file"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The batch is complete but no generated files remain on disk (BATCH_FILES_MISSING).",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string"
+                                                },
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "details": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "BATCH_NOT_READY"
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "Batch processing is not complete."
+                                                },
+                                                "details": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "code",
+                                                "message",
+                                                "details"
+                                            ]
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Batch processing is not complete."
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#\/components\/responses\/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "\/webhooks\/paddle": {
+            "post": {
+                "operationId": "v1.webhooks.paddle",
+                "summary": "Handle incoming Paddle webhook events",
+                "tags": [
+                    "PaddleWebhook"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ok"
+                                                },
+                                                "transaction_id": {
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "type": "null"
+                                                        },
+                                                        {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                ""
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "credits_granted": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "status",
+                                                "transaction_id",
+                                                "credits_granted"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ok"
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "already_processed"
+                                                }
+                                            },
+                                            "required": [
+                                                "status",
+                                                "message"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ignored"
+                                                }
+                                            },
+                                            "required": [
+                                                "status"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ignored"
+                                                },
+                                                "event_type": {}
+                                            },
+                                            "required": [
+                                                "status",
+                                                "event_type"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "User not found"
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "const": "Missing transaction ID"
+                                                }
+                                            },
+                                            "required": [
+                                                "error"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "const": "Invalid signature"
+                                                }
+                                            },
+                                            "required": [
+                                                "error"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application\/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "Webhook secret unconfigured"
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "BatchResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "setup_status": {
+                        "type": "string"
+                    },
+                    "total_items": {
+                        "type": "integer"
+                    },
+                    "processed_items": {
+                        "type": "integer"
+                    },
+                    "failed_items": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "row_index": {
+                                    "type": "integer"
+                                },
+                                "status": {
+                                    "type": "string"
+                                },
+                                "download_url": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "Only show download URL if completed"
+                                },
+                                "error": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "row_index",
+                                "status",
+                                "download_url",
+                                "error"
+                            ]
+                        }
+                    },
+                    "links": {
+                        "type": "object",
+                        "properties": {
+                            "self": {
+                                "type": "string"
+                            },
+                            "zip": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "self",
+                            "zip"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "setup_status",
+                    "total_items",
+                    "processed_items",
+                    "failed_items",
+                    "created_at",
+                    "updated_at",
+                    "links"
+                ],
+                "title": "BatchResource"
+            },
+            "GenerateDocumentRequest": {
+                "type": "object",
+                "properties": {
+                    "template_uuid": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "template_base64": {
+                        "type": "string",
+                        "maxLength": 13981016
+                    },
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 1,
+                        "maxItems": 500
+                    },
+                    "format": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "zip",
+                            null
+                        ]
+                    }
+                },
+                "required": [
+                    "data"
+                ],
+                "title": "GenerateDocumentRequest"
+            }
+        },
+        "responses": {
+            "AuthenticationException": {
+                "description": "Unauthenticated",
+                "content": {
+                    "application\/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthorizationException": {
+                "description": "Authorization error",
+                "content": {
+                    "application\/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
