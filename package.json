@@ -1,6 +1,6 @@
 {
   "name": "@trydoku/node",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official Node.js and TypeScript client for the TRYDOKU document generation API",
   "license": "MIT",
   "author": "TRYDOKU <support@trydoku.com>",
@@ -41,13 +41,13 @@
     "prepublishOnly": "npm run check"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.2",
     "@types/node18": "npm:@types/node@^18.19.130",
-    "@vitest/coverage-v8": "5.0.3",
+    "@vitest/coverage-v8": "5.1.0",
     "tsup": "^8.5.1",
     "typescript": "~5.9.3",
-    "vite": "^6.4.3",
-    "vitest": "5.0.3"
+    "vite": "^6.4.6",
+    "vitest": "5.1.0"
   },
   "overrides": { "esbuild": "^0.28.1" }
 }
